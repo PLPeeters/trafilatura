@@ -10,7 +10,6 @@ from typing import List, Optional, Tuple
 
 from courlan.urlutils import fix_relative_urls, get_base_url
 from lxml.etree import _Element, Element, SubElement, XPath, strip_tags, tostring
-from lxml.html import HtmlElement
 
 from .deduplication import duplicate_test
 from .settings import (
@@ -20,7 +19,7 @@ from .settings import (
     MANUALLY_CLEANED,
     MANUALLY_STRIPPED,
 )
-from .utils import textfilter, trim, is_image_element
+from .utils import textfilter, trim, is_image_element, get_element_text_content
 from .xml import META_ATTRIBUTES, delete_element
 
 
@@ -47,7 +46,7 @@ PRESERVE_IMG_CLEANING = {"figure", "picture", "source"}
 CODE_INDICATORS = ["{", "(\"", "('", "\n    "]
 
 
-def tree_cleaning(tree: HtmlElement, options: Extractor) -> HtmlElement:
+def tree_cleaning(tree: _Element, options: Extractor) -> _Element:
     "Prune the tree by discarding unwanted elements."
     # determine cleaning strategy, use lists to keep it deterministic
     cleaning_list, stripping_list = MANUALLY_CLEANED.copy(), MANUALLY_STRIPPED.copy()
@@ -82,7 +81,7 @@ def tree_cleaning(tree: HtmlElement, options: Extractor) -> HtmlElement:
     return prune_html(tree, options.focus)
 
 
-def prune_html(tree: HtmlElement, focus: str = "balanced") -> HtmlElement:
+def prune_html(tree: _Element, focus: str = "balanced") -> _Element:
     "Delete selected empty elements to save space and processing time."
     tails = focus != "precision"
     # .//comment() needed for date extraction
@@ -93,11 +92,11 @@ def prune_html(tree: HtmlElement, focus: str = "balanced") -> HtmlElement:
 
 
 def prune_unwanted_nodes(
-    tree: HtmlElement, nodelist: List[XPath], with_backup: bool = False
-) -> HtmlElement:
+    tree: _Element, nodelist: List[XPath], with_backup: bool = False
+) -> _Element:
     "Prune the HTML tree by removing unwanted sections."
     if with_backup:
-        old_len = len(tree.text_content())  # ' '.join(tree.itertext())
+        old_len = len(get_element_text_content(tree))  # ' '.join(tree.itertext())
         backup = deepcopy(tree)
 
     for expression in nodelist:
@@ -114,17 +113,17 @@ def prune_unwanted_nodes(
             delete_element(subtree)
 
     if with_backup:
-        new_len = len(tree.text_content())
+        new_len = len(get_element_text_content(tree))
         # todo: adjust for recall and precision settings
         return tree if new_len > old_len / 7 else backup
     return tree
 
 
 def collect_link_info(
-    links_xpath: List[HtmlElement],
+    links_xpath: List[_Element],
 ) -> Tuple[int, int, int, List[str]]:
     "Collect heuristics on link text"
-    mylist = [e for e in (trim(elem.text_content()) for elem in links_xpath) if e]
+    mylist = [e for e in (trim(get_element_text_content(elem)) for elem in links_xpath) if e]
     lengths = list(map(len, mylist))
     # longer strings impact recall in favor of precision
     shortelems = sum(1 for l in lengths if l < 10)
@@ -132,7 +131,7 @@ def collect_link_info(
 
 
 def link_density_test(
-    element: HtmlElement, text: str, favor_precision: bool = False
+    element: _Element, text: str, favor_precision: bool = False
 ) -> Tuple[bool, List[str]]:
     "Remove sections which are rich in links (probably boilerplate)"
     links_xpath = element.findall(".//ref")
@@ -142,7 +141,7 @@ def link_density_test(
     # shortcut
     if len(links_xpath) == 1:
         len_threshold = 10 if favor_precision else 100
-        link_text = trim(links_xpath[0].text_content())
+        link_text = trim(get_element_text_content(links_xpath[0]))
         if len(link_text) > len_threshold and len(link_text) > len(text) * 0.9:
             return True, []
     if element.tag == "p":
@@ -171,14 +170,14 @@ def link_density_test(
     return False, mylist
 
 
-def link_density_test_tables(element: HtmlElement) -> bool:
+def link_density_test_tables(element: _Element) -> bool:
     "Remove tables which are rich in links (probably boilerplate)."
     links_xpath = element.findall(".//ref")
 
     if not links_xpath:
         return False
 
-    elemlen = len(trim(element.text_content()))
+    elemlen = len(trim(get_element_text_content(element)))
     if elemlen < 200:
         return False
 
@@ -191,11 +190,11 @@ def link_density_test_tables(element: HtmlElement) -> bool:
 
 
 def delete_by_link_density(
-    subtree: HtmlElement,
+    subtree: _Element,
     tagname: str,
     backtracking: bool = False,
     favor_precision: bool = False,
-) -> HtmlElement:
+) -> _Element:
     """Determine the link density of elements with respect to their length,
     and remove the elements identified as boilerplate."""
     deletions = []
@@ -203,7 +202,7 @@ def delete_by_link_density(
     depth_threshold = 1 if favor_precision else 3
 
     for elem in subtree.iter(tagname):
-        elemtext = trim(elem.text_content())
+        elemtext = trim(get_element_text_content(elem))
         result, templist = link_density_test(elem, elemtext, favor_precision)
         if result or (
             backtracking
@@ -378,7 +377,7 @@ CONVERSIONS = {
 }
 
 
-def convert_link(elem: HtmlElement, base_url: Optional[str]) -> None:
+def convert_link(elem: _Element, base_url: Optional[str]) -> None:
     "Replace link tags and href attributes, delete the rest."
     elem.tag = "ref"
     target = elem.get("href")  # defaults to None
@@ -391,8 +390,8 @@ def convert_link(elem: HtmlElement, base_url: Optional[str]) -> None:
 
 
 def convert_tags(
-    tree: HtmlElement, options: Extractor, url: Optional[str] = None
-) -> HtmlElement:
+    tree: _Element, options: Extractor, url: Optional[str] = None
+) -> _Element:
     "Simplify markup and convert relevant HTML tags to an XML standard."
     # delete links for faster processing
     if not options.links:

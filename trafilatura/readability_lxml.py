@@ -24,10 +24,10 @@ from math import sqrt
 from operator import attrgetter
 from typing import Any, Dict, Optional, Set
 
-from lxml.etree import tostring
-from lxml.html import HtmlElement, fragment_fromstring
+from lxml.etree import _Element, tostring
+from lxml.html import fragment_fromstring
 
-from .utils import load_html, trim
+from .utils import load_html, trim, get_element_text_content
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ LOGGER = logging.getLogger(__name__)
 DOT_SPACE = re.compile(r"\.( |$)")
 
 
-def _tostring(string: HtmlElement) -> str:
+def _tostring(string: _Element) -> str:
     return tostring(string, encoding=str, method="xml")
 
 
@@ -84,9 +84,9 @@ LIST_TAGS = {"ol", "ul"}
 # DIV_TO_P_ELEMS = {'a', 'blockquote', 'dl', 'div', 'img', 'ol', 'p', 'pre', 'table', 'ul'}
 
 
-def text_length(elem: HtmlElement) -> int:
+def text_length(elem: _Element) -> int:
     "Return the length of the element with all its contents."
-    return len(trim(elem.text_content()))
+    return len(trim(get_element_text_content(elem)))
 
 
 class Candidate:
@@ -94,9 +94,9 @@ class Candidate:
 
     __slots__ = ["score", "elem"]
 
-    def __init__(self, score: float, elem: HtmlElement) -> None:
+    def __init__(self, score: float, elem: _Element) -> None:
         self.score: float = score
-        self.elem: HtmlElement = elem
+        self.elem: _Element = elem
 
 
 class Document:
@@ -104,7 +104,7 @@ class Document:
 
     __slots__ = ["doc", "min_text_length", "retry_length"]
 
-    def __init__(self, doc: HtmlElement, min_text_length: int = 25, retry_length: int = 250) -> None:
+    def __init__(self, doc: _Element, min_text_length: int = 25, retry_length: int = 250) -> None:
         """Generate the document
 
         :param doc: string of the html content.
@@ -165,7 +165,7 @@ class Document:
                 continue
             return cleaned_article
 
-    def get_article(self, candidates: Dict[HtmlElement, Candidate], best_candidate: Candidate) -> HtmlElement:
+    def get_article(self, candidates: Dict[_Element, Candidate], best_candidate: Candidate) -> _Element:
         # Now that we have the top candidate, look through its siblings for
         # content that might also be related.
         # Things like preambles, content split by ads that we removed, etc.
@@ -206,7 +206,7 @@ class Document:
         #    output.append(best_candidate.elem)
         return output
 
-    def select_best_candidate(self, candidates: Dict[HtmlElement, Candidate]) -> Optional[Candidate]:
+    def select_best_candidate(self, candidates: Dict[_Element, Candidate]) -> Optional[Candidate]:
         if not candidates:
             return None
         sorted_candidates = sorted(
@@ -217,12 +217,12 @@ class Document:
                 LOGGER.debug("Top 5: %s %s", candidate.elem.tag, candidate.score)
         return next(iter(sorted_candidates))
 
-    def get_link_density(self, elem: HtmlElement) -> float:
+    def get_link_density(self, elem: _Element) -> float:
         total_length = text_length(elem) or 1
         link_length = sum(text_length(link) for link in elem.findall(".//a"))
         return link_length / total_length
 
-    def score_paragraphs(self) -> Dict[HtmlElement, Candidate]:
+    def score_paragraphs(self) -> Dict[_Element, Candidate]:
         candidates = {}
 
         for elem in self.doc.iter("p", "pre", "td"):
@@ -231,7 +231,7 @@ class Document:
                 continue
             grand_parent_node = parent_node.getparent()
 
-            elem_text = trim(elem.text_content())
+            elem_text = trim(get_element_text_content(elem))
             elem_text_len = len(elem_text)
 
             # discard too short paragraphs
@@ -258,7 +258,7 @@ class Document:
 
         return candidates
 
-    def class_weight(self, elem: HtmlElement) -> float:
+    def class_weight(self, elem: _Element) -> float:
         weight = 0
         for attribute in filter(None, (elem.get("class"), elem.get("id"))):
             if REGEXES["negativeRe"].search(attribute):
@@ -267,7 +267,7 @@ class Document:
                 weight += 25
         return weight
 
-    def score_node(self, elem: HtmlElement) -> Candidate:
+    def score_node(self, elem: _Element) -> Candidate:
         score = self.class_weight(elem)
         tag = str(elem.tag)
         name = tag.lower()
@@ -323,7 +323,7 @@ class Document:
                 if child.tag == "br":
                     child.drop_tree()
 
-    def sanitize(self, node: HtmlElement, candidates: Dict[HtmlElement, Candidate]) -> str:
+    def sanitize(self, node: _Element, candidates: Dict[_Element, Candidate]) -> str:
         for header in node.iter("h1", "h2", "h3", "h4", "h5", "h6"):
             if self.class_weight(header) < 0 or self.get_link_density(header) > 0.33:
                 header.drop_tree()
@@ -337,7 +337,7 @@ class Document:
             else:
                 elem.drop_tree()
 
-        allowed: Set[HtmlElement] = set()
+        allowed: Set[_Element] = set()
         # Conditionally clean <table>s, <ul>s, and <div>s
         for elem in reversed(
             node.xpath("//table|//ul|//div|//aside|//header|//footer|//section")
@@ -354,7 +354,7 @@ class Document:
                     weight,
                 )
                 elem.drop_tree()
-            elif elem.text_content().count(",") < 10:
+            elif get_element_text_content(elem).count(",") < 10:
                 to_remove = True
                 counts = {
                     kind: len(elem.findall(f".//{kind}")) for kind in TEXT_CLEAN_ELEMS
@@ -456,7 +456,7 @@ REGEXPS = {
 DISPLAY_NONE = re.compile(r"display:\s*none", re.I)
 
 
-def is_node_visible(node: HtmlElement) -> bool:
+def is_node_visible(node: _Element) -> bool:
     """
     Checks if the node is visible by considering style, attributes, and class.
     """
@@ -472,7 +472,7 @@ def is_node_visible(node: HtmlElement) -> bool:
     return True
 
 
-def is_probably_readerable(html: HtmlElement, options: Any={}) -> bool:
+def is_probably_readerable(html: _Element, options: Any={}) -> bool:
     """
     Decides whether or not the document is reader-able without parsing the whole thing.
     """
@@ -501,7 +501,7 @@ def is_probably_readerable(html: HtmlElement, options: Any={}) -> bool:
         if node.xpath("./parent::li/p"):
             continue
 
-        text_content_length = len(node.text_content().strip())
+        text_content_length = len(get_element_text_content(node).strip())
         if text_content_length < min_content_length:
             continue
 

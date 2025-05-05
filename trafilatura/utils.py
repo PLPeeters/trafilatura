@@ -52,7 +52,7 @@ except ImportError:
 
 from charset_normalizer import from_bytes
 from lxml.etree import _Element
-from lxml.html import HtmlElement, HTMLParser, fromstring
+from lxml.html import HtmlElement, HTMLParser, fromstring, _collect_string_content
 # response types
 from urllib3.response import HTTPResponse
 
@@ -218,12 +218,12 @@ def fromstring_bytes(htmlobject: str) -> Optional[HtmlElement]:
     return tree
 
 
-def load_html(htmlobject: Any) -> Optional[HtmlElement]:
+def load_html(htmlobject: Any) -> Optional[_Element]:
     """Load object given as input and validate its type
     (accepted: lxml.html tree, trafilatura/urllib3 response, bytestring and string)
     """
     # use tree directly
-    if isinstance(htmlobject, HtmlElement):
+    if isinstance(htmlobject, _Element):
         return htmlobject
     # use trafilatura or urllib3 responses directly
     if isinstance(htmlobject, HTTPResponse) or hasattr(htmlobject, "data"):
@@ -533,3 +533,10 @@ def is_last_element_in_item(element: _Element) -> bool:
         return True
     else:
         return next_element.tag == 'item'
+
+
+def get_element_text_content(element: _Element) -> str:
+    if isinstance(element, HtmlElement):
+        return element.text_content()
+
+    return _collect_string_content(element)

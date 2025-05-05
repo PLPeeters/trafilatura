@@ -28,6 +28,7 @@ except ImportError:
     print("Cannot import baseline, using simple version")
     baseline = None
     html2txt = None
+from trafilatura.utils import get_element_text_content
 #from trafilatura.htmlprocessing import prune_html
 #from trafilatura.external import ReadabilityDocument, custom_justext, jt_stoplist_init
 #from trafilatura.external import try_readability, sanitize_tree, custom_justext, jt_stoplist_init
@@ -124,7 +125,7 @@ def run_baseline_2(htmlstring):
         #        continue
         #    entry = element.text
         #else:
-        entry = element.text_content()
+        entry = get_tree_text(element)
         #if entry not in results and len(entry) > 10:
         resultlist.append(entry)
         #results.add(entry)

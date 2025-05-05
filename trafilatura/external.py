@@ -11,7 +11,6 @@ from typing import Any, Tuple
 from justext.core import ParagraphMaker, classify_paragraphs, revise_paragraph_classification  # type: ignore
 from justext.utils import get_stoplist, get_stoplists  # type: ignore
 from lxml.etree import _Element, Element, strip_tags, tostring
-from lxml.html import HtmlElement
 
 # own
 from .baseline import basic_cleaning
@@ -29,20 +28,20 @@ JT_STOPLIST = None
 SANITIZED_XPATH = './/aside|.//audio|.//button|.//fieldset|.//figure|.//footer|.//iframe|.//input|.//label|.//link|.//nav|.//noindex|.//noscript|.//object|.//option|.//select|.//source|.//svg|.//time'
 
 
-def try_readability(htmlinput: HtmlElement) -> HtmlElement:
+def try_readability(htmlinput: _Element) -> _Element:
     '''Safety net: try with the generic algorithm readability'''
     # defaults: min_text_length=25, retry_length=250
     try:
         doc = ReadabilityDocument(htmlinput, min_text_length=25, retry_length=250)
         # force conversion to utf-8 (see #319)
         summary = fromstring_bytes(doc.summary())
-        return summary if summary is not None else HtmlElement()
+        return summary if summary is not None else Element(None)
     except Exception as err:
         LOGGER.warning('readability_lxml failed: %s', err)
-        return HtmlElement()
+        return Element(None)
 
 
-def compare_extraction(tree: HtmlElement, backup_tree: HtmlElement, body: _Element, text: str, len_text: int, options: Any) -> Tuple[_Element, str, int]:
+def compare_extraction(tree: _Element, backup_tree: _Element, body: _Element, text: str, len_text: int, options: Any) -> Tuple[_Element, str, int]:
     '''Decide whether to choose own or external extraction
        based on a series of heuristics'''
     # bypass for recall
@@ -118,7 +117,7 @@ def jt_stoplist_init() -> Tuple[str]:
     return JT_STOPLIST
 
 
-def custom_justext(tree: HtmlElement, stoplist: Tuple[str]) -> Any:
+def custom_justext(tree: _Element, stoplist: Tuple[str]) -> Any:
     'Customized version of JusText processing'
     paragraphs = ParagraphMaker.make_paragraphs(tree)
     classify_paragraphs(paragraphs, stoplist, 50, 150, 0.1, 0.2, 0.25, True)
@@ -126,7 +125,7 @@ def custom_justext(tree: HtmlElement, stoplist: Tuple[str]) -> Any:
     return paragraphs
 
 
-def try_justext(tree: HtmlElement, url: str, target_language: str) -> _Element:
+def try_justext(tree: _Element, url: str, target_language: str) -> _Element:
     '''Second safety net: try with the generic algorithm justext'''
     # init
     result_body = Element('body')
@@ -150,7 +149,7 @@ def try_justext(tree: HtmlElement, url: str, target_language: str) -> _Element:
     return result_body
 
 
-def justext_rescue(tree: HtmlElement, options: Any) -> Tuple[_Element, str, int]:
+def justext_rescue(tree: _Element, options: Any) -> Tuple[_Element, str, int]:
     '''Try to use justext algorithm as a second fallback'''
     # additional cleaning
     tree = basic_cleaning(tree)
@@ -160,7 +159,7 @@ def justext_rescue(tree: HtmlElement, options: Any) -> Tuple[_Element, str, int]
     return temppost_algo, temp_text, len(temp_text)
 
 
-def sanitize_tree(tree: HtmlElement, options: Any) -> Tuple[HtmlElement, str, int]:
+def sanitize_tree(tree: _Element, options: Any) -> Tuple[_Element, str, int]:
     '''Convert and sanitize the output from the generic algorithm (post-processing)'''
     # 1. clean
     cleaned_tree = tree_cleaning(tree, options)

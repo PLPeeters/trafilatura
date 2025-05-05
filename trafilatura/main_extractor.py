@@ -11,7 +11,6 @@ from typing import Any, Optional, Tuple, Set, Union
 from urllib.parse import urljoin
 
 from lxml.etree import _Element, Element, SubElement, strip_elements, strip_tags, tostring
-from lxml.html import HtmlElement
 
 # own
 from .htmlprocessing import (delete_by_link_density, handle_textnode,
@@ -525,7 +524,7 @@ def handle_textelem(element: _Element, potential_tags: Set[str], options: Extrac
     return new_element
 
 
-def recover_wild_text(tree: HtmlElement, result_body: _Element, options: Extractor, potential_tags: Any = TAG_CATALOG) -> _Element:
+def recover_wild_text(tree: _Element, result_body: _Element, options: Extractor, potential_tags: Any = TAG_CATALOG) -> _Element:
     '''Look for all previously unconsidered wild elements, including outside of the determined
        frame and throughout the document to recover potentially missing text parts'''
     LOGGER.debug('Recovering wild text elements')
@@ -546,7 +545,7 @@ def recover_wild_text(tree: HtmlElement, result_body: _Element, options: Extract
     return result_body
 
 
-def prune_unwanted_sections(tree: HtmlElement, potential_tags: Set[str], options: Extractor) -> HtmlElement:
+def prune_unwanted_sections(tree: _Element, potential_tags: Set[str], options: Extractor) -> _Element:
     'Rule-based deletion of targeted document sections'
     favor_precision = options.focus == "precision"
     # prune the rest
@@ -580,7 +579,7 @@ def prune_unwanted_sections(tree: HtmlElement, potential_tags: Set[str], options
     return tree
 
 
-def _extract(tree: HtmlElement, options: Extractor) -> Tuple[_Element, str, Set[str]]:
+def _extract(tree: _Element, options: Extractor) -> Tuple[_Element, str, Set[str]]:
     # init
     potential_tags = set(TAG_CATALOG)
     if options.tables is True:
@@ -633,7 +632,7 @@ def _extract(tree: HtmlElement, options: Extractor) -> Tuple[_Element, str, Set[
     return result_body, temp_text, potential_tags
 
 
-def extract_content(cleaned_tree: HtmlElement, options: Extractor) -> Tuple[_Element, str, int]:
+def extract_content(cleaned_tree: _Element, options: Extractor) -> Tuple[_Element, str, int]:
     '''Find the main content of a page using a set of XPath expressions,
        then extract relevant elements, strip them of unwanted subparts and
        convert them'''
@@ -670,7 +669,7 @@ def process_comments_node(elem: _Element, potential_tags: Set[str], options: Ext
     return None
 
 
-def extract_comments(tree: HtmlElement, options: Extractor) -> Tuple[_Element, str, int, HtmlElement]:
+def extract_comments(tree: _Element, options: Extractor) -> Tuple[_Element, str, int, _Element]:
     "Try to extract comments out of potential sections in the HTML."
     comments_body = Element("body")
     # define iteration strategy

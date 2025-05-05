@@ -10,7 +10,6 @@ from copy import copy, deepcopy
 from typing import Any, Dict, Optional, Set, Tuple, Union
 
 from lxml.etree import _Element, Element, XPath, strip_tags
-from lxml.html import HtmlElement
 
 # own
 from .baseline import baseline
@@ -100,9 +99,9 @@ def determine_returnstring(document: Document, options: Extractor) -> str:
 
 
 def trafilatura_sequence(
-    cleaned_tree: HtmlElement,
-    cleaned_tree_backup: HtmlElement,
-    tree_backup: HtmlElement,
+    cleaned_tree: _Element,
+    cleaned_tree_backup: _Element,
+    tree_backup: _Element,
     options: Extractor,
 ) -> Tuple[_Element, str, int]:
     "Execute the standard cascade of extractors used by Trafilatura."

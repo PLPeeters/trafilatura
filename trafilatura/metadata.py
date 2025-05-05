@@ -18,8 +18,8 @@ from courlan import (
     validate_url,
 )
 from htmldate import find_date
-from lxml.etree import XPath
-from lxml.html import HtmlElement, tostring
+from lxml.etree import _Element, XPath
+from lxml.html import tostring
 
 from .htmlprocessing import prune_unwanted_nodes
 from .json_metadata import (
@@ -29,7 +29,7 @@ from .json_metadata import (
     normalize_json,
 )
 from .settings import Document, set_date_params
-from .utils import HTML_STRIP_TAGS, line_processing, load_html, trim
+from .utils import HTML_STRIP_TAGS, line_processing, load_html, trim, get_element_text_content
 from .xpaths import (
     AUTHOR_DISCARD_XPATHS,
     AUTHOR_XPATHS,
@@ -179,7 +179,7 @@ def check_authors(authors: str, author_blacklist: Set[str]) -> Optional[str]:
     return None
 
 
-def extract_meta_json(tree: HtmlElement, metadata: Document) -> Document:
+def extract_meta_json(tree: _Element, metadata: Document) -> Document:
     """Parse and extract metadata from JSON-LD data"""
     for elem in tree.xpath(
         './/script[@type="application/ld+json" or @type="application/settings+json"]'
@@ -195,7 +195,7 @@ def extract_meta_json(tree: HtmlElement, metadata: Document) -> Document:
     return metadata
 
 
-def extract_opengraph(tree: HtmlElement) -> Dict[str, Optional[str]]:
+def extract_opengraph(tree: _Element) -> Dict[str, Optional[str]]:
     """Search meta tags following the OpenGraph guidelines (https://ogp.me/)"""
     result = dict.fromkeys(
         ("title", "author", "url", "description", "sitename", "image", "pagetype")
@@ -218,7 +218,7 @@ def extract_opengraph(tree: HtmlElement) -> Dict[str, Optional[str]]:
     return result
 
 
-def examine_meta(tree: HtmlElement) -> Document:
+def examine_meta(tree: _Element) -> Document:
     """Search meta tags for relevant information"""
     # bootstrap from potential OpenGraph tags
     metadata = Document().from_dict(extract_opengraph(tree))
@@ -316,7 +316,7 @@ def examine_meta(tree: HtmlElement) -> Document:
 
 
 def extract_metainfo(
-    tree: HtmlElement, expressions: List[XPath], len_limit: int = 200
+    tree: _Element, expressions: List[XPath], len_limit: int = 200
 ) -> Optional[str]:
     """Extract meta information"""
     # try all XPath expressions
@@ -335,25 +335,25 @@ def extract_metainfo(
 
 
 def examine_title_element(
-    tree: HtmlElement,
+    tree: _Element,
 ) -> Tuple[str, Optional[str], Optional[str]]:
     """Extract text segments out of main <title> element."""
     title = ""
     title_element = tree.find(".//head//title")
     if title_element is not None:
-        title = trim(title_element.text_content())
+        title = trim(get_element_text_content(title_element))
         if match := HTMLTITLE_REGEX.match(title):
             return title, match[1], match[2]
     LOGGER.debug("no main title found")
     return title, None, None
 
 
-def extract_title(tree: HtmlElement) -> Optional[str]:
+def extract_title(tree: _Element) -> Optional[str]:
     """Extract the document title"""
     # only one h1-element: take it
     h1_results = tree.findall(".//h1")
     if len(h1_results) == 1:
-        title = trim(h1_results[0].text_content())
+        title = trim(get_element_text_content(h1_results[0]))
         if title:
             return title
     # extract using x-paths
@@ -367,16 +367,16 @@ def extract_title(tree: HtmlElement) -> Optional[str]:
             return t
     # take first h1-title
     if h1_results:
-        return h1_results[0].text_content()
+        return get_element_text_content(h1_results[0])
     # take first h2-title
     try:
-        title = tree.xpath(".//h2")[0].text_content()
+        title = get_element_text_content(tree.xpath(".//h2")[0])
     except IndexError:
         LOGGER.debug("no h2 title found")
     return title
 
 
-def extract_author(tree: HtmlElement) -> Optional[str]:
+def extract_author(tree: _Element) -> Optional[str]:
     """Extract the document author(s)"""
     subtree = prune_unwanted_nodes(deepcopy(tree), AUTHOR_DISCARD_XPATHS)
     author = extract_metainfo(subtree, AUTHOR_XPATHS, len_limit=120)
@@ -386,7 +386,7 @@ def extract_author(tree: HtmlElement) -> Optional[str]:
     return author
 
 
-def extract_url(tree: HtmlElement, default_url: Optional[str] = None) -> Optional[str]:
+def extract_url(tree: _Element, default_url: Optional[str] = None) -> Optional[str]:
     """Extract the URL from the canonical link"""
     for selector in URL_SELECTORS:
         element = tree.find(selector)
@@ -413,13 +413,13 @@ def extract_url(tree: HtmlElement, default_url: Optional[str] = None) -> Optiona
     return url or default_url
 
 
-def extract_sitename(tree: HtmlElement) -> Optional[str]:
+def extract_sitename(tree: _Element) -> Optional[str]:
     """Extract the name of a site from the main title (if it exists)"""
     _, *parts = examine_title_element(tree)
     return next((part for part in parts if part and "." in part), None)
 
 
-def extract_catstags(metatype: str, tree: HtmlElement) -> List[str]:
+def extract_catstags(metatype: str, tree: _Element) -> List[str]:
     """Find category and tag information"""
     results: List[str] = []
     regexpr = "/" + metatype + "[s|ies]?/"
@@ -427,7 +427,7 @@ def extract_catstags(metatype: str, tree: HtmlElement) -> List[str]:
     # search using custom expressions
     for catexpr in xpath_expression:
         results.extend(
-            elem.text_content()
+            get_element_text_content(elem)
             for elem in catexpr(tree)
             if re.search(regexpr, elem.attrib["href"])
         )
@@ -446,7 +446,7 @@ def extract_catstags(metatype: str, tree: HtmlElement) -> List[str]:
     return [r for r in dict.fromkeys(line_processing(x) for x in results if x) if r]
 
 
-def parse_license_element(element: HtmlElement, strict: bool = False) -> Optional[str]:
+def parse_license_element(element: _Element, strict: bool = False) -> Optional[str]:
     """Probe a link for identifiable free license cues.
     Parse the href attribute first and then the link text."""
     # look for Creative Commons elements
@@ -462,7 +462,7 @@ def parse_license_element(element: HtmlElement, strict: bool = False) -> Optiona
     return None
 
 
-def extract_license(tree: HtmlElement) -> Optional[str]:
+def extract_license(tree: _Element) -> Optional[str]:
     """Search the HTML code for license information and parse it."""
     # look for links labeled as license
     for element in tree.findall('.//a[@rel="license"][@href]'):
@@ -480,7 +480,7 @@ def extract_license(tree: HtmlElement) -> Optional[str]:
 
 
 def extract_metadata(
-    filecontent: Union[HtmlElement, str],
+    filecontent: Union[_Element, str],
     default_url: Optional[str] = None,
     date_config: Optional[Any] = None,
     extensive: bool = True,

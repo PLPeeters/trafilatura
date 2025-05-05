@@ -8,14 +8,13 @@ import json
 from typing import Any, Tuple
 
 from lxml.etree import _Element, Element, SubElement
-from lxml.html import HtmlElement
 
 from .settings import BASIC_CLEAN_XPATH
-from .utils import load_html, trim
+from .utils import load_html, trim, get_element_text_content
 from .xml import delete_element
 
 
-def basic_cleaning(tree: HtmlElement) -> HtmlElement:
+def basic_cleaning(tree: _Element) -> _Element:
     "Remove a few section types from the document."
     for elem in BASIC_CLEAN_XPATH(tree):
         delete_element(elem)
@@ -49,7 +48,7 @@ def baseline(filecontent: Any) -> Tuple[_Element, str, int]:
             if json_body:
                 if "<p>" in json_body:
                     parsed = load_html(json_body)
-                    text = trim(parsed.text_content()) if parsed is not None else ""
+                    text = trim(get_element_text_content(parsed)) if parsed is not None else ""
                 else:
                     text = trim(json_body)
                 SubElement(postbody, 'p').text = text
@@ -63,7 +62,7 @@ def baseline(filecontent: Any) -> Tuple[_Element, str, int]:
     # scrape from article tag
     temp_text = ""
     for article_elem in tree.iterfind('.//article'):
-        text = trim(article_elem.text_content())
+        text = trim(get_element_text_content(article_elem))
         if len(text) > 100:
             SubElement(postbody, 'p').text = text
             temp_text += " " + text if temp_text else text
@@ -76,7 +75,7 @@ def baseline(filecontent: Any) -> Tuple[_Element, str, int]:
     temp_text = ""
     # postbody = Element('body')
     for element in tree.iter('blockquote', 'code', 'p', 'pre', 'q', 'quote'):
-        entry = trim(element.text_content())
+        entry = trim(get_element_text_content(element))
         if entry not in results:
             SubElement(postbody, 'p').text = entry
             temp_text += " " + entry if temp_text else entry
@@ -120,4 +119,4 @@ def html2txt(content: Any, clean: bool = True) -> str:
         return ""
     if clean:
         body = basic_cleaning(body)
-    return " ".join(body.text_content().split()).strip()
+    return " ".join(get_element_text_content(body).split()).strip()
